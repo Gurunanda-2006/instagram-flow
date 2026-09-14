@@ -124,4 +124,54 @@ async function appendRow(data) {
   return newId;
 }
 
-module.exports = { getAllRows, appendRow };
+// ─── Delete a row by Instagram media ID ──────────────────────────────────────
+/**
+ * Finds the row in the sheet that contains the given ig_media_id (column B)
+ * and permanently deletes it.
+ * @param {string} igMediaId
+ * @returns {Promise<boolean>} true if deleted, false if not found
+ */
+async function deleteRowByMediaId(igMediaId) {
+  const sheets = getSheetsClient();
+
+  // 1. Get all rows to find which row index has this media ID
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${TAB_NAME}!A:G`,
+  });
+
+  const rows = res.data.values || [];
+  let targetRowIndex = -1; // 1-indexed sheet row
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][1] === igMediaId) {
+      targetRowIndex = i + 1; // rows array is 0-indexed; sheet rows are 1-indexed
+      break;
+    }
+  }
+  if (targetRowIndex === -1) return false;
+
+  // 2. Get the internal sheetId (not the spreadsheet ID)
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
+  const sheetId = spreadsheet.data.sheets[0].properties.sheetId;
+
+  // 3. Delete that single row
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: {
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId,
+            dimension: 'ROWS',
+            startIndex: targetRowIndex - 1, // batchUpdate uses 0-indexed
+            endIndex:   targetRowIndex,
+          },
+        },
+      }],
+    },
+  });
+
+  return true;
+}
+
+module.exports = { getAllRows, appendRow, deleteRowByMediaId };

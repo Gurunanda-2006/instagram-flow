@@ -196,6 +196,30 @@ async function refreshLongLivedToken() {
   }
 }
 
+// ─── Delete an Instagram post ────────────────────────────────────────────
+/**
+ * Deletes a published Instagram post via the Graph API.
+ * Note: Instagram only allows deletion of posts published via the API.
+ * Errors are caught and returned — never thrown — so Sheet + Cloudinary
+ * cleanup still completes even if Instagram deletion is unavailable.
+ *
+ * @param {string} igMediaId
+ * @returns {Promise<{ success: boolean, message: string }>}
+ */
+async function deleteInstagramPost(igMediaId) {
+  try {
+    const res = await axios.delete(`${BASE_URL}/${igMediaId}`, {
+      params: { access_token: TOKEN() },
+    });
+    console.log(`[IG] Post ${igMediaId} deleted from Instagram:`, res.data);
+    return { success: true, message: 'Deleted from Instagram' };
+  } catch (err) {
+    const msg = err.response?.data?.error?.message || err.message;
+    console.warn(`[IG] Could not delete post ${igMediaId} from Instagram: ${msg}`);
+    return { success: false, message: msg };
+  }
+}
+
 module.exports = {
   createMediaContainer,
   publishContainer,
@@ -203,4 +227,5 @@ module.exports = {
   replyToComment,
   subscribeAccountToWebhook,
   refreshLongLivedToken,
+  deleteInstagramPost,
 };

@@ -19,13 +19,15 @@
  */
 
 const express  = require('express');
-const { upload }               = require('../middleware/upload');
-const { uploadImage }          = require('../services/imageUpload');
+const { upload }                      = require('../middleware/upload');
+const { uploadImage, deleteCloudinaryImage } = require('../services/imageUpload');
 const { createMediaContainer,
         publishContainer,
-        refreshLongLivedToken }= require('../services/instagram');
-const { appendRow, getAllRows } = require('../services/sheets');
-const { cache }                = require('../services/cache');
+        refreshLongLivedToken,
+        deleteInstagramPost }          = require('../services/instagram');
+const { appendRow, getAllRows,
+        deleteRowByMediaId }           = require('../services/sheets');
+const { cache }                       = require('../services/cache');
 
 const router = express.Router();
 
@@ -94,6 +96,48 @@ router.get('/refresh-token', async (_req, res, next) => {
       message:      'Token refreshed — update IG_ACCESS_TOKEN in Render env vars with the new token',
       access_token: data.access_token,
       expires_in:   data.expires_in,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── DELETE /api/posts/:igMediaId ───────────────────────────────────────────
+router.delete('/posts/:igMediaId', async (req, res, next) => {
+  try {
+    const { igMediaId } = req.params;
+    if (!igMediaId) return res.status(400).json({ error: 'igMediaId is required' });
+
+    // 1. Get the post data (for image_url) before deleting
+    const allRows   = await getAllRows();
+    const postRow   = allRows.find(r => r.ig_media_id === igMediaId);
+    const imageUrl  = postRow?.image_url || '';
+
+    console.log(`[DELETE] Deleting post ${igMediaId}…`);
+
+    // 2. Delete from Instagram (non-fatal if it fails)
+    const igResult = await deleteInstagramPost(igMediaId);
+    console.log('[DELETE] Instagram:', igResult.message);
+
+    // 3. Delete image from Cloudinary (non-fatal)
+    if (imageUrl) {
+      try { await deleteCloudinaryImage(imageUrl); }
+      catch (e) { console.warn('[DELETE] Cloudinary delete failed:', e.message); }
+    }
+
+    // 4. Delete row from Google Sheet
+    const sheetDeleted = await deleteRowByMediaId(igMediaId);
+    console.log('[DELETE] Sheet row deleted:', sheetDeleted);
+
+    // 5. Refresh in-memory cache
+    await cache.refresh();
+
+    return res.json({
+      success:         true,
+      ig_media_id:     igMediaId,
+      instagram:       igResult,
+      cloudinary:      imageUrl ? 'deleted' : 'no image',
+      sheet:           sheetDeleted ? 'deleted' : 'not found',
     });
   } catch (err) {
     next(err);

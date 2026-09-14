@@ -12,11 +12,7 @@ export default function App() {
       {/* ── Header ── */}
       <header className="app-header">
         <div className="header-brand">
-          <img
-            src="/logo.png"
-            alt="ASG Servizi Logo"
-            className="header-logo-img"
-          />
+          <img src="/logo.png" alt="ASG Servizi" className="header-logo-img" />
           <div>
             <div className="header-title">ASG Servizi</div>
             <div className="header-subtitle">Instagram Automation Dashboard</div>
@@ -28,13 +24,44 @@ export default function App() {
         </div>
       </header>
 
-      {/* ── Hero Banner ── */}
+      {/* ── Main content (top) ── */}
+      <main>
+        {/* Stats Row */}
+        <div className="stats-row">
+          <div className="stat-card">
+            <div className="stat-label">Posts Tracked</div>
+            <div className="stat-value red">{postCount}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">DM Trigger</div>
+            <div className="stat-value" style={{ fontSize: '1rem', marginTop: '8px' }}>Keyword Comment</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Poll Interval</div>
+            <div className="stat-value" style={{ fontSize: '1rem', marginTop: '8px' }}>60 seconds</div>
+          </div>
+        </div>
+
+        <div className="main-grid">
+          {/* Left — publish form */}
+          <section aria-label="Publish new post">
+            <PublishForm onPublished={() => setRefreshKey((k) => k + 1)} />
+          </section>
+
+          {/* Right — posts list */}
+          <section aria-label="Published posts">
+            <PostsList
+              refreshKey={refreshKey}
+              onCountChange={setPostCount}
+              onDeleted={() => setRefreshKey((k) => k + 1)}
+            />
+          </section>
+        </div>
+      </main>
+
+      {/* ── Hero Banner (bottom — wow section when you scroll down) ── */}
       <div className="hero-banner">
-        <img
-          src="/car-hero.png"
-          alt="ASG Servizi Premium"
-          className="hero-banner-img"
-        />
+        <img src="/car-hero.png" alt="ASG Servizi Premium" className="hero-banner-img" />
         <div className="hero-banner-overlay">
           <div className="hero-text">
             <h1>Publish & <span>Automate</span></h1>
@@ -45,42 +72,6 @@ export default function App() {
           </div>
         </div>
       </div>
-
-      {/* ── Main content ── */}
-      <main>
-        {/* Stats Row */}
-        <div className="stats-row">
-          <div className="stat-card">
-            <div className="stat-label">Posts Tracked</div>
-            <div className="stat-value red" id="stat-posts">{postCount}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">DM Trigger</div>
-            <div className="stat-value" style={{ fontSize: '1.1rem', marginTop: '8px' }}>Keyword Comment</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Poll Interval</div>
-            <div className="stat-value" style={{ fontSize: '1.1rem', marginTop: '8px' }}>60 sec</div>
-          </div>
-        </div>
-
-        <div className="main-grid">
-          {/* Left — publish form */}
-          <section aria-label="Publish new post">
-            <PublishForm onPublished={() => {
-              setRefreshKey((k) => k + 1);
-            }} />
-          </section>
-
-          {/* Right — posts list */}
-          <section aria-label="Published posts">
-            <PostsList
-              refreshKey={refreshKey}
-              onCountChange={setPostCount}
-            />
-          </section>
-        </div>
-      </main>
 
       {/* ── Footer ── */}
       <footer className="app-footer">

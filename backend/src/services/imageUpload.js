@@ -82,4 +82,30 @@ async function uploadImage(fileBuffer, mimeType, filename) {
   return url;
 }
 
-module.exports = { uploadImage };
+// ─── Delete an image from Cloudinary ─────────────────────────────────────────
+/**
+ * Extracts the public_id from a Cloudinary URL and destroys the asset.
+ * URL format: https://res.cloudinary.com/<cloud>/image/upload/v<ver>/<folder>/<name>.jpg
+ *
+ * @param {string} imageUrl  The full Cloudinary image URL stored in the Sheet
+ */
+async function deleteCloudinaryImage(imageUrl) {
+  if (!imageUrl || !imageUrl.includes('cloudinary.com')) {
+    console.warn('[IMAGE] Skipping Cloudinary delete — URL not a Cloudinary URL:', imageUrl);
+    return;
+  }
+
+  // Extract everything after /upload/ and strip the file extension
+  const match = imageUrl.match(/\/upload\/(?:v\d+\/)?(.+)\.[a-z]+$/i);
+  if (!match) {
+    console.warn('[IMAGE] Could not extract public_id from URL:', imageUrl);
+    return;
+  }
+  const publicId = match[1];
+  console.log(`[IMAGE] Deleting Cloudinary asset: ${publicId}`);
+
+  const result = await cloudinary.uploader.destroy(publicId);
+  console.log(`[IMAGE] Cloudinary delete result for "${publicId}":`, result.result);
+}
+
+module.exports = { uploadImage, deleteCloudinaryImage };
