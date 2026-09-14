@@ -13,7 +13,7 @@
 
 const axios = require('axios');
 const { cache } = require('./cache');
-const { sendPrivateReply } = require('./instagram');
+const { sendPrivateReply, replyToComment } = require('./instagram');
 
 const BASE_URL  = 'https://graph.instagram.com/v22.0';
 const TOKEN     = () => process.env.IG_ACCESS_TOKEN;
@@ -82,11 +82,18 @@ async function pollOnce() {
       console.log(`[POLL] ✓ Matched! "@${commenterName}" commented "${text}" — sending DM with: ${product_link}`);
 
       try {
-        // Pass commentId — works for ANY account, no prior contact needed
+        // Step 1: Send private DM with the product link (works for ANY account)
         await sendPrivateReply(commentId, product_link);
         console.log(`[POLL] ✓ DM sent to @${commenterName} (${commenterIgsid})`);
+
+        // Step 2: Post a public reply on the comment confirming the DM
+        await replyToComment(
+          commentId,
+          commenterName,
+          'We have sent the product link to your DM! 📩 Check your messages.'
+        );
       } catch (err) {
-        console.error(`[POLL] ✗ DM failed for @${commenterName}:`, err.response?.data || err.message);
+        console.error(`[POLL] ✗ Failed for @${commenterName}:`, err.response?.data || err.message);
       }
     }
   }

@@ -123,6 +123,34 @@ async function sendPrivateReply(commentId, message) {
   }
 }
 
+// ─── Post a public reply on a comment ────────────────────────────────────────
+/**
+ * Posts a public reply text on the given comment (visible to everyone).
+ * Used to notify the commenter publicly that the DM has been sent.
+ *
+ * @param {string} commentId     The Instagram comment ID to reply to
+ * @param {string} username      The commenter's username (for the @mention)
+ * @param {string} replyText     The public reply text
+ */
+async function replyToComment(commentId, username, replyText) {
+  try {
+    await axios.post(
+      `${BASE_URL}/${commentId}/replies`,
+      null,
+      {
+        params: {
+          message:      `@${username} ${replyText}`,
+          access_token: TOKEN(),
+        },
+      },
+    );
+    console.log(`[IG] Public reply posted on comment ${commentId} for @${username}`);
+  } catch (err) {
+    // Non-fatal — DM was already sent, just log if public reply fails
+    console.warn(`[IG] Public reply failed for comment ${commentId}:`, err.response?.data?.error?.message || err.message);
+  }
+}
+
 // ─── Subscribe IG account to webhook events ──────────────────────────────────
 /**
  * Tells Instagram to send webhook events (comments) for this account to our
@@ -172,6 +200,7 @@ module.exports = {
   createMediaContainer,
   publishContainer,
   sendPrivateReply,
+  replyToComment,
   subscribeAccountToWebhook,
   refreshLongLivedToken,
 };
