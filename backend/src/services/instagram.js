@@ -97,27 +97,27 @@ async function waitForContainerReady(containerId) {
   throw new Error('Instagram media container did not reach FINISHED state in time');
 }
 
-// ─── Send a private DM to a commenter ───────────────────────────────────────
+// ─── Send a private DM to a commenter via their comment ─────────────────────
 /**
- * Sends a private DM to the commenter using the Instagram Messages API.
- * The message is routed to the commenter's Inbox (if they follow) or Message
- * Requests (if they don't) — Instagram handles the routing automatically.
+ * Sends a private DM using the comment_id as the recipient identifier.
+ * This bypasses the 'allowed window' restriction — works for ANY Instagram
+ * account (followers, non-followers, first-time contacts) without needing
+ * Advanced Access / App Review.
  *
- * @param {string} commenterIgsid  The commenter's Instagram Scoped User ID
- *                                  (from webhook payload: value.from.id)
- * @param {string} message          The product link / reply text to send
+ * @param {string} commentId  The Instagram comment ID (from comments API: id field)
+ * @param {string} message    The product link / reply text to send
  */
-async function sendPrivateReply(commenterIgsid, message) {
+async function sendPrivateReply(commentId, message) {
   try {
-    await axios.post(
+    const res = await axios.post(
       `${BASE_URL}/${IG_USER()}/messages`,
       {
-        recipient: { id: commenterIgsid },
+        recipient: { comment_id: commentId },
         message:   { text: message },
       },
       { params: { access_token: TOKEN() } },
     );
-    console.log(`[IG] Private DM sent to IGSID ${commenterIgsid}`);
+    console.log(`[IG] Private reply sent for comment ${commentId} — recipient: ${res.data.recipient_id}`);
   } catch (err) {
     throw igError('sendPrivateReply', err);
   }

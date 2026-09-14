@@ -77,18 +77,14 @@ async function pollOnce() {
       const commenterName  = comment.from?.username || 'unknown';
 
       if (!text.includes(trigger_keyword.toLowerCase())) continue;
-      if (!commenterIgsid) {
-        console.log(`[POLL] Comment ${commentId} matched but no IGSID — skipping`);
-        processed.add(commentId);
-        continue;
-      }
 
       processed.add(commentId);
       console.log(`[POLL] ✓ Matched! "@${commenterName}" commented "${text}" — sending DM with: ${product_link}`);
 
       try {
-        await sendPrivateReply(commenterIgsid, product_link);
-        console.log(`[POLL] ✓ DM sent to @${commenterName}`);
+        // Pass commentId — works for ANY account, no prior contact needed
+        await sendPrivateReply(commentId, product_link);
+        console.log(`[POLL] ✓ DM sent to @${commenterName} (${commenterIgsid})`);
       } catch (err) {
         console.error(`[POLL] ✗ DM failed for @${commenterName}:`, err.response?.data || err.message);
       }
