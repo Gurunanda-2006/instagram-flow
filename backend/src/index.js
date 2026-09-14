@@ -22,9 +22,40 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 const { subscribeAccountToWebhook } = require('./services/instagram');
 
+// ─── Raw webhook event logger (debug) ────────────────────────────────────────
+const webhookLog = [];
+app.use('/webhook/instagram', (req, _res, next) => {
+  if (req.method === 'POST') {
+    webhookLog.push({ ts: new Date().toISOString(), body: req.body });
+    if (webhookLog.length > 20) webhookLog.shift();
+    console.log('[DEBUG] Raw webhook received:', JSON.stringify(req.body));
+  }
+  next();
+});
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 app.use('/api',      publishRouter);
 app.use('/webhook',  webhookRouter);
+
+// Debug: see the last webhook payloads Meta sent us
+app.get('/api/last-webhook', (_req, res) => res.json(webhookLog));
+
+// Debug: test sending a DM directly to an IGSID
+app.get('/api/test-dm', async (req, res) => {
+  const { igsid, message } = req.query;
+  if (!igsid) return res.status(400).json({ error: 'Pass ?igsid=XXXX&message=hello' });
+  try {
+    const axios = require('axios');
+    const result = await axios.post(
+      `https://graph.instagram.com/v22.0/${process.env.IG_BUSINESS_ACCOUNT_ID}/messages`,
+      { recipient: { id: igsid }, message: { text: message || 'Test DM from InstaFlow ✅' } },
+      { params: { access_token: process.env.IG_ACCESS_TOKEN } }
+    );
+    res.json({ success: true, result: result.data });
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
 
 // One-time endpoint: registers this IG account to receive webhook comment events
 // Call GET https://instagram-flow.onrender.com/api/subscribe-webhook once after deploy
