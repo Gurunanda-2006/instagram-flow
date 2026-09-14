@@ -43,6 +43,17 @@ const cache = {
   size() {
     return _store.size;
   },
+
+  /**
+   * Return all cached posts as an array for the polling service.
+   * @returns {Array<{ ig_media_id: string, product_link: string, trigger_keyword: string }>}
+   */
+  all() {
+    return Array.from(_store.entries()).map(([ig_media_id, data]) => ({
+      ig_media_id,
+      ...data,
+    }));
+  },
 };
 
 module.exports = { cache };

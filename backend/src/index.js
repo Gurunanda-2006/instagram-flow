@@ -94,9 +94,12 @@ async function start() {
     await cache.refresh();
     console.log(`[BOOT] Cache ready — ${cache.size()} posts loaded.`);
   } catch (err) {
-    // Non-fatal: the sheet might be empty on first run
     console.warn('[BOOT] Cache warm-up skipped:', err.message);
   }
+
+  // Start comment polling (fallback for development mode — works without Live webhook)
+  const { startPolling } = require('./services/pollComments');
+  startPolling();
 
   app.listen(PORT, () => {
     console.log(`[BOOT] Server listening on port ${PORT}`);
