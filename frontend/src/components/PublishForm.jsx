@@ -1,9 +1,8 @@
 import React, { useState, useCallback } from 'react';
 
-const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BACKEND     = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 const MAX_CAPTION = 2200;
 
-// ─── Drag-over hook ───────────────────────────────────────────────────────────
 function useDragOver() {
   const [dragOver, setDragOver] = useState(false);
   const handlers = {
@@ -16,13 +15,13 @@ function useDragOver() {
 }
 
 export default function PublishForm({ onPublished }) {
-  const [image,          setImage]          = useState(null);   // File
-  const [preview,        setPreview]        = useState(null);   // data URL
+  const [image,          setImage]          = useState(null);
+  const [preview,        setPreview]        = useState(null);
   const [caption,        setCaption]        = useState('');
   const [productLink,    setProductLink]    = useState('');
   const [triggerKeyword, setTriggerKeyword] = useState('');
   const [loading,        setLoading]        = useState(false);
-  const [status,         setStatus]         = useState(null);   // { type, message }
+  const [status,         setStatus]         = useState(null);
 
   const [dragOver, dragHandlers] = useDragOver();
 
@@ -40,20 +39,17 @@ export default function PublishForm({ onPublished }) {
     if (file) handleFile(file);
   }, [dragHandlers, handleFile]);
 
-  const removeImage = () => {
-    setImage(null);
-    setPreview(null);
-  };
+  const removeImage = () => { setImage(null); setPreview(null); };
 
   const captionLen = caption.length;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!image)          return setStatus({ type: 'error', message: 'Please select an image.' });
-    if (!caption.trim()) return setStatus({ type: 'error', message: 'Caption cannot be empty.' });
-    if (!productLink.trim()) return setStatus({ type: 'error', message: 'Product link is required.' });
+    if (!image)                 return setStatus({ type: 'error', message: 'Please select an image.' });
+    if (!caption.trim())        return setStatus({ type: 'error', message: 'Caption cannot be empty.' });
+    if (!productLink.trim())    return setStatus({ type: 'error', message: 'Product link is required.' });
     if (!triggerKeyword.trim()) return setStatus({ type: 'error', message: 'Trigger keyword is required.' });
-    if (captionLen > MAX_CAPTION) return setStatus({ type: 'error', message: `Caption is too long (${captionLen}/${MAX_CAPTION}).` });
+    if (captionLen > MAX_CAPTION) return setStatus({ type: 'error', message: `Caption too long (${captionLen}/${MAX_CAPTION}).` });
 
     setLoading(true);
     setStatus(null);
@@ -65,20 +61,12 @@ export default function PublishForm({ onPublished }) {
       formData.append('product_link',    productLink.trim());
       formData.append('trigger_keyword', triggerKeyword.trim().toLowerCase());
 
-      const res = await fetch(`${BACKEND}/api/publish`, {
-        method: 'POST',
-        body:   formData,
-      });
-
+      const res  = await fetch(`${BACKEND}/api/publish`, { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Publish failed');
 
       setStatus({ type: 'success', message: `✓ Published! Post ID: ${data.ig_media_id}` });
-      setImage(null);
-      setPreview(null);
-      setCaption('');
-      setProductLink('');
-      setTriggerKeyword('');
+      setImage(null); setPreview(null); setCaption(''); setProductLink(''); setTriggerKeyword('');
       onPublished?.();
     } catch (err) {
       setStatus({ type: 'error', message: err.message });
@@ -89,127 +77,84 @@ export default function PublishForm({ onPublished }) {
 
   return (
     <div className="card">
-      <h2 className="card-title">
-        <span className="card-title-icon">📸</span>
-        New Post
-      </h2>
-
-      <form onSubmit={handleSubmit} noValidate>
-        {/* ── Image upload ── */}
-        <div className="form-group">
-          <label className="form-label">Image</label>
-
-          {preview ? (
-            <div className="image-preview-wrap">
-              <img src={preview} alt="Preview" className="image-preview" />
-              <div className="image-preview-overlay">
-                <button type="button" className="image-remove-btn" onClick={removeImage}>
-                  Remove Image
-                </button>
-              </div>
-              <div className="image-filename">
-                <span>📄</span>
-                <span>{image?.name}</span>
-                <span style={{ color: 'var(--text-400)', marginLeft: 'auto' }}>
-                  {(image?.size / 1024).toFixed(0)} KB
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div
-              className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
-              {...dragHandlers}
-              onDrop={onDrop}
-            >
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                id="image-input"
-                onChange={(e) => handleFile(e.target.files[0])}
-              />
-              <span className="drop-zone-icon">🖼️</span>
-              <p className="drop-zone-label">Drag &amp; drop or click to upload</p>
-              <p className="drop-zone-hint">JPEG, PNG, WEBP — up to 8 MB</p>
-            </div>
-          )}
+      <div className="card-header">
+        <div className="card-header-icon">📸</div>
+        <div>
+          <h2>Publish New Post</h2>
+          <p>Upload an image and configure automation</p>
         </div>
+      </div>
 
-        {/* ── Caption ── */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="caption-input">Caption</label>
-          <textarea
-            id="caption-input"
-            className="form-textarea"
-            placeholder="Write your Instagram caption…"
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            maxLength={MAX_CAPTION + 50}
-          />
-          <div
-            className={`char-count ${
-              captionLen > MAX_CAPTION ? 'over' : captionLen > MAX_CAPTION * 0.9 ? 'warn' : ''
-            }`}
-          >
-            {captionLen} / {MAX_CAPTION}
-          </div>
-        </div>
-
-        {/* ── Product link + Trigger keyword (side-by-side) ── */}
-        <div className="form-row">
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" htmlFor="product-link-input">Product Link</label>
-            <input
-              id="product-link-input"
-              type="url"
-              className="form-input"
-              placeholder="https://amazon.in/…"
-              value={productLink}
-              onChange={(e) => setProductLink(e.target.value)}
-            />
-          </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" htmlFor="trigger-keyword-input">Trigger Keyword</label>
-            <input
-              id="trigger-keyword-input"
-              type="text"
-              className="form-input"
-              placeholder='e.g. "link"'
-              value={triggerKeyword}
-              onChange={(e) => setTriggerKeyword(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* ── Submit ── */}
-        <button
-          type="submit"
-          className="btn-publish"
-          disabled={loading}
-          id="publish-btn"
-        >
-          {loading ? (
-            <>
-              <span className="spinner" />
-              Publishing…
-            </>
-          ) : (
-            <>
-              <span>🚀</span>
-              Publish to Instagram
-            </>
-          )}
-        </button>
-
-        {/* ── Status banner ── */}
+      <div className="card-body">
         {status && (
-          <div className={`status-banner ${status.type}`}>
-            <span className="status-icon">
-              {status.type === 'success' ? '✅' : '❌'}
-            </span>
+          <div className={`toast ${status.type === 'success' ? 'toast-success' : 'toast-error'}`}>
+            <span className="toast-icon">{status.type === 'success' ? '✅' : '❌'}</span>
             <span>{status.message}</span>
           </div>
         )}
-      </form>
+
+        <form onSubmit={handleSubmit} noValidate>
+
+          {/* Image upload */}
+          <div className="form-group">
+            <label className="form-label">Image <span>*</span></label>
+            {preview ? (
+              <div>
+                <img src={preview} alt="Preview" className="upload-preview" />
+                <button type="button" className="btn btn-secondary"
+                  onClick={removeImage} style={{ marginTop: 8, width: '100%' }}>
+                  ✕ Remove Image
+                </button>
+                <div className="form-hint">📄 {image?.name} · {(image?.size / 1024).toFixed(0)} KB</div>
+              </div>
+            ) : (
+              <div className={`upload-zone ${dragOver ? 'dragover' : ''}`} {...dragHandlers} onDrop={onDrop}>
+                <input type="file" accept="image/jpeg,image/png,image/webp" id="image-input"
+                  onChange={(e) => handleFile(e.target.files[0])} />
+                <span className="upload-icon">🖼️</span>
+                <div className="upload-text">Drag & drop or click to upload</div>
+                <div className="upload-subtext">JPEG, PNG, WEBP — up to 8 MB</div>
+              </div>
+            )}
+          </div>
+
+          {/* Caption */}
+          <div className="form-group">
+            <label className="form-label" htmlFor="caption-input">Caption <span>*</span></label>
+            <textarea id="caption-input" className="form-textarea"
+              placeholder="Write your Instagram caption…"
+              value={caption} onChange={(e) => setCaption(e.target.value)}
+              maxLength={MAX_CAPTION + 50} />
+            <div className="form-hint" style={{ color: captionLen > MAX_CAPTION ? 'var(--red)' : undefined }}>
+              {captionLen} / {MAX_CAPTION} characters
+            </div>
+          </div>
+
+          {/* Product link */}
+          <div className="form-group">
+            <label className="form-label" htmlFor="product-link-input">Product Link <span>*</span></label>
+            <input id="product-link-input" type="url" className="form-input"
+              placeholder="https://amazon.in/…"
+              value={productLink} onChange={(e) => setProductLink(e.target.value)} />
+            <div className="form-hint">Users who comment the trigger word receive this link via DM</div>
+          </div>
+
+          {/* Trigger keyword */}
+          <div className="form-group">
+            <label className="form-label" htmlFor="trigger-keyword-input">Trigger Keyword <span>*</span></label>
+            <input id="trigger-keyword-input" type="text" className="form-input"
+              placeholder='e.g. "link" or "product"'
+              value={triggerKeyword} onChange={(e) => setTriggerKeyword(e.target.value)} />
+            <div className="form-hint">Case-insensitive — "LINK", "Link", "link" all match ✓</div>
+          </div>
+
+          {/* Submit */}
+          <button type="submit" className="btn btn-primary" disabled={loading} id="publish-btn">
+            {loading ? <><span className="spinner" />Publishing…</> : <>🚀 Publish to Instagram</>}
+          </button>
+
+        </form>
+      </div>
     </div>
   );
 }

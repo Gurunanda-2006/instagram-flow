@@ -21,15 +21,14 @@ function truncate(str, max = 80) {
 
 function SkeletonCards() {
   return (
-    <div className="posts-loading">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {[1, 2, 3].map((i) => (
-        <div key={i} className="skeleton skeleton-card" />
+        <div key={i} className="skeleton" style={{ height: 80, borderRadius: 12 }} />
       ))}
     </div>
   );
 }
 
-// ─── Refresh icon SVG ─────────────────────────────────────────────────────────
 function RefreshIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -40,7 +39,7 @@ function RefreshIcon() {
   );
 }
 
-export default function PostsList({ refreshKey }) {
+export default function PostsList({ refreshKey, onCountChange }) {
   const [posts,    setPosts]    = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
@@ -52,7 +51,9 @@ export default function PostsList({ refreshKey }) {
       const res  = await fetch(`${BACKEND}/api/posts`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load posts');
-      setPosts(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setPosts(list);
+      onCountChange?.(list.length);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -60,102 +61,97 @@ export default function PostsList({ refreshKey }) {
       setLoading(false);
       setSpinning(false);
     }
-  }, []);
+  }, [onCountChange]);
 
-  // Initial load
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
-
-  // Re-fetch when a new post is published (parent increments refreshKey)
-  useEffect(() => {
-    if (refreshKey > 0) fetchPosts();
-  }, [refreshKey, fetchPosts]);
+  useEffect(() => { if (refreshKey > 0) fetchPosts(); }, [refreshKey, fetchPosts]);
 
   return (
-    <div>
-      <div className="section-header">
-        <h2 className="section-title">
-          <span>📋</span>
-          Published Posts
-          {!loading && (
-            <span className="section-count">{posts.length}</span>
-          )}
-        </h2>
+    <div className="card">
+      <div className="card-header">
+        <div className="card-header-icon">📋</div>
+        <div>
+          <h2>Published Posts</h2>
+          <p>{posts.length} post{posts.length !== 1 ? 's' : ''} tracked for automation</p>
+        </div>
         <button
-          className={`refresh-btn ${spinning ? 'spinning' : ''}`}
+          className="btn btn-secondary"
+          style={{ marginLeft: 'auto', padding: '7px 14px', fontSize: '0.8rem' }}
           onClick={() => fetchPosts(true)}
           disabled={spinning}
           id="refresh-posts-btn"
           title="Refresh posts"
         >
-          <RefreshIcon />
+          {spinning
+            ? <span className="spinner" style={{ borderTopColor: 'var(--text-mid)' }} />
+            : <RefreshIcon />}
           Refresh
         </button>
       </div>
 
-      {loading && <SkeletonCards />}
+      <div className="card-body">
+        {loading && <SkeletonCards />}
 
-      {!loading && error && (
-        <div className="status-banner error" style={{ margin: 0 }}>
-          <span className="status-icon">❌</span>
-          <span>{error}</span>
-        </div>
-      )}
+        {!loading && error && (
+          <div className="toast toast-error">
+            <span className="toast-icon">❌</span>
+            <span>{error}</span>
+          </div>
+        )}
 
-      {!loading && !error && posts.length === 0 && (
-        <div className="posts-empty">
-          <span className="posts-empty-icon">🌱</span>
-          <p className="posts-empty-text">No posts yet — publish your first one!</p>
-        </div>
-      )}
+        {!loading && !error && posts.length === 0 && (
+          <div className="empty-state">
+            <span className="empty-icon">🌱</span>
+            <div className="empty-title">No posts yet</div>
+            <div className="empty-desc">Publish your first post to start the automation!</div>
+          </div>
+        )}
 
-      {!loading && !error && posts.length > 0 && (
-        <div className="posts-list">
-          {posts.map((post, i) => (
-            <div className="post-card" key={post.ig_media_id || i} id={`post-${post.ig_media_id || i}`}>
-              {post.image_url ? (
-                <img
-                  src={post.image_url}
-                  alt="Post thumbnail"
-                  className="post-thumb"
-                  loading="lazy"
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              ) : (
-                <div className="post-thumb-placeholder">🖼️</div>
-              )}
-              <div className="post-body">
-                <div className="post-caption" title={post.caption}>
-                  {truncate(post.caption, 90)}
-                </div>
-                <div className="post-meta">
-                  {post.trigger_keyword && (
-                    <span className="post-tag keyword" title="Trigger keyword">
-                      🔑 {post.trigger_keyword}
-                    </span>
-                  )}
-                  {post.product_link && (
-                    <a
-                      className="post-tag link"
-                      href={post.product_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={post.product_link}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      🔗 {truncate(post.product_link.replace(/^https?:\/\//, ''), 30)}
-                    </a>
-                  )}
+        {!loading && !error && posts.length > 0 && (
+          <div className="posts-list">
+            {posts.map((post, i) => (
+              <div className="post-item" key={post.ig_media_id || i} id={`post-${post.ig_media_id || i}`}>
+                {post.image_url ? (
+                  <img
+                    src={post.image_url}
+                    alt="Post thumbnail"
+                    className="post-thumb"
+                    loading="lazy"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className="post-thumb-placeholder">🖼️</div>
+                )}
+                <div className="post-info">
+                  <div className="post-caption" title={post.caption}>
+                    {truncate(post.caption, 90)}
+                  </div>
+                  <div className="post-meta">
+                    {post.trigger_keyword && (
+                      <span className="post-tag post-tag-keyword">🔑 {post.trigger_keyword}</span>
+                    )}
+                    {post.product_link && (
+                      <a
+                        className="post-tag post-tag-link"
+                        href={post.product_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={post.product_link}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        🔗 {truncate(post.product_link.replace(/^https?:\/\//, ''), 28)}
+                      </a>
+                    )}
+                  </div>
                   {post.created_at && (
-                    <span className="post-tag date">
-                      🕐 {formatDate(post.created_at)}
-                    </span>
+                    <div className="post-date">🕐 {formatDate(post.created_at)}</div>
                   )}
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
