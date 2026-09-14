@@ -55,13 +55,17 @@ router.post('/instagram', express.json(), async (req, res) => {
         // We only care about comment events
         if (change.field !== 'comments') continue;
 
-        const value     = change.value || {};
-        const commentId = value.id;
-        const mediaId   = value.media?.id;
-        const text      = (value.text || '').toLowerCase().trim();
+        const value       = change.value || {};
+        const commentId   = value.id;
+        const mediaId     = value.media?.id;
+        const text        = (value.text || '').toLowerCase().trim();
+        const commenterIgsid = value.from?.id;   // Instagram Scoped User ID — used for DM
+        const commenterName  = value.from?.username || 'unknown';
 
-        if (!commentId || !mediaId || !text) {
-          console.log('[WEBHOOK] Skipping comment — missing fields:', { commentId, mediaId, text });
+        console.log(`[WEBHOOK] Comment received from @${commenterName} (IGSID: ${commenterIgsid}): "${text}"`);
+
+        if (!commentId || !mediaId || !text || !commenterIgsid) {
+          console.log('[WEBHOOK] Skipping comment — missing fields:', { commentId, mediaId, text, commenterIgsid });
           continue;
         }
 
@@ -89,8 +93,8 @@ router.post('/instagram', express.json(), async (req, res) => {
         // Mark as processed before the async call to prevent races
         processedComments.add(commentId);
 
-        console.log(`[WEBHOOK] ✓ Keyword match! Sending private reply for comment ${commentId}`);
-        await sendPrivateReply(commentId, product_link);
+        console.log(`[WEBHOOK] ✓ Keyword match! Sending private DM to @${commenterName} (${commenterIgsid})`);
+        await sendPrivateReply(commenterIgsid, product_link);
 
       }
     }

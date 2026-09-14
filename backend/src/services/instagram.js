@@ -97,26 +97,54 @@ async function waitForContainerReady(containerId) {
   throw new Error('Instagram media container did not reach FINISHED state in time');
 }
 
-// ─── Send a private reply to a comment ───────────────────────────────────────
+// ─── Send a private DM to a commenter ───────────────────────────────────────
 /**
- * Sends a private reply DM when a comment contains the trigger keyword.
- * The reply is routed to the commenter's Inbox (if they follow) or Message
+ * Sends a private DM to the commenter using the Instagram Messages API.
+ * The message is routed to the commenter's Inbox (if they follow) or Message
  * Requests (if they don't) — Instagram handles the routing automatically.
  *
- * @param {string} commentId  The comment's numeric ID from the webhook payload
- * @param {string} message    The product link / reply text to send
+ * @param {string} commenterIgsid  The commenter's Instagram Scoped User ID
+ *                                  (from webhook payload: value.from.id)
+ * @param {string} message          The product link / reply text to send
  */
-async function sendPrivateReply(commentId, message) {
+async function sendPrivateReply(commenterIgsid, message) {
   try {
-    await axios.post(`${BASE_URL}/${commentId}/replies`, null, {
-      params: {
-        message,
-        access_token: TOKEN(),
+    await axios.post(
+      `${BASE_URL}/${IG_USER()}/messages`,
+      {
+        recipient: { id: commenterIgsid },
+        message:   { text: message },
       },
-    });
-    console.log(`[IG] Private reply sent for comment ${commentId}`);
+      { params: { access_token: TOKEN() } },
+    );
+    console.log(`[IG] Private DM sent to IGSID ${commenterIgsid}`);
   } catch (err) {
     throw igError('sendPrivateReply', err);
+  }
+}
+
+// ─── Subscribe IG account to webhook events ──────────────────────────────────
+/**
+ * Tells Instagram to send webhook events (comments) for this account to our
+ * registered callback URL. Must be called once after deploying.
+ * Call GET /api/subscribe-webhook to trigger this.
+ */
+async function subscribeAccountToWebhook() {
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/${IG_USER()}/subscribed_apps`,
+      null,
+      {
+        params: {
+          subscribed_fields: 'comments,messages',
+          access_token:       TOKEN(),
+        },
+      },
+    );
+    console.log('[IG] Account subscribed to webhook:', res.data);
+    return res.data;
+  } catch (err) {
+    throw igError('subscribeWebhook', err);
   }
 }
 
@@ -134,7 +162,7 @@ async function refreshLongLivedToken() {
         access_token: TOKEN(),
       },
     });
-    return res.data; // { access_token, token_type, expires_in }
+    return res.data;
   } catch (err) {
     throw igError('refreshToken', err);
   }
@@ -144,5 +172,6 @@ module.exports = {
   createMediaContainer,
   publishContainer,
   sendPrivateReply,
+  subscribeAccountToWebhook,
   refreshLongLivedToken,
 };
