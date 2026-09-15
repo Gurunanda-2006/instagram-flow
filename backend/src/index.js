@@ -93,13 +93,13 @@ async function start() {
     console.log('[BOOT] Warming in-memory cache from Google Sheets…');
     await cache.refresh();
     console.log(`[BOOT] Cache ready — ${cache.size()} posts loaded.`);
+    
+    // Warm up the deduplication cache for the webhook
+    const { initSentCache } = require('./services/sheets');
+    await initSentCache();
   } catch (err) {
     console.warn('[BOOT] Cache warm-up skipped:', err.message);
   }
-
-  // Start comment polling (fallback for development mode — works without Live webhook)
-  const { startPolling } = require('./services/pollComments');
-  await startPolling();
 
   app.listen(PORT, () => {
     console.log(`[BOOT] Server listening on port ${PORT}`);

@@ -185,100 +185,87 @@ async function deleteRowByMediaId(igMediaId) {
 
 const DM_LOG_TAB = 'DM_Sent';
 
+/** In-memory Set of already-sent DMs (composite keys: igsid_mediaId) */
+const sentCache = new Set();
+
 /**
  * Ensures the DM_Sent tab exists in the spreadsheet with correct headers.
- * Creates the tab if it doesn't exist yet.
  */
 async function ensureDMLogTab() {
   const sheets = getSheetsClient();
-
-  // Check if tab already exists
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
-  const exists = meta.data.sheets.some(
-    (s) => s.properties.title === DM_LOG_TAB
-  );
+  const exists = meta.data.sheets.some((s) => s.properties.title === DM_LOG_TAB);
 
   if (!exists) {
-    // Create the tab
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId: SHEET_ID,
-      requestBody: {
-        requests: [{ addSheet: { properties: { title: DM_LOG_TAB } } }],
-      },
+      requestBody: { requests: [{ addSheet: { properties: { title: DM_LOG_TAB } } }] },
     });
-    // Write header row
     await sheets.spreadsheets.values.update({
       spreadsheetId:     SHEET_ID,
       range:             `${DM_LOG_TAB}!A1:E1`,
       valueInputOption: 'RAW',
-      requestBody: {
-        values: [['igsid', 'username', 'media_id', 'comment_id', 'sent_at']],
-      },
+      requestBody: { values: [['igsid', 'username', 'media_id', 'comment_id', 'sent_at']] },
     });
     console.log('[SHEETS] Created DM_Sent tab');
   }
 }
 
 /**
- * Loads all IGSIDs that have already received a DM into a Set.
- * Call once at boot to warm the in-memory guard.
- *
- * @returns {Promise<Set<string>>}
+ * Loads all IGSID_MEDIA records from Google Sheets into the internal sentCache.
+ * Call once at server boot.
  */
-async function loadSentIgsids() {
+async function initSentCache() {
   try {
     await ensureDMLogTab();
     const sheets = getSheetsClient();
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range:         `${DM_LOG_TAB}!A:C`,  // Fetch columns A through C to get igsid and media_id
+      range:         `${DM_LOG_TAB}!A:C`,
     });
     const rows = res.data.values || [];
-    // Skip header row (index 0)
-    // We now read Column A (igsid) and Column C (media_id) to segment by post
+    
+    // Clear existing cache before loading
+    sentCache.clear();
+
     const keys = rows.slice(1).map((r) => {
       const igsid = r[0] || '';
       const mediaId = r[2] || '';
       return `${igsid}_${mediaId}`;
-    }).filter(k => k !== '_' && !k.endsWith('_')); // Ignore empty/malformed rows
+    }).filter(k => k !== '_' && !k.endsWith('_'));
 
-    console.log(`[SHEETS] Loaded ${keys.length} already-sent IGSID_MEDIA records from DM_Sent tab`);
-    return new Set(keys);
+    keys.forEach(k => sentCache.add(k));
+    console.log(`[SHEETS] Dedup cache loaded — ${sentCache.size} already-sent records`);
   } catch (err) {
     console.warn('[SHEETS] Could not load DM_Sent tab:', err.message);
-    return new Set();
   }
 }
 
 /**
  * Checks whether a DM has already been sent to this IGSID for THIS SPECIFIC POST.
- * Uses the in-memory Set (sentCache) for speed — no network call.
+ * Uses the internal in-memory Set for speed.
  *
- * @param {Set<string>} sentCache  The in-memory Set populated at boot
- * @param {string}      igsid
- * @param {string}      mediaId
+ * @param {string} igsid
+ * @param {string} mediaId
  * @returns {boolean}
  */
-function isDMAlreadySent(sentCache, igsid, mediaId) {
+function isDMAlreadySent(igsid, mediaId) {
   return sentCache.has(`${igsid}_${mediaId}`);
 }
 
 /**
- * Records that a DM was sent to this IGSID for this Media by:
- *   1. Adding to the in-memory Set immediately
- *   2. Appending a row to the DM_Sent Google Sheet tab (persistent)
+ * Records that a DM was sent to this IGSID for this Media.
+ * Instantly adds to memory, then persists to Google Sheets.
  *
- * @param {Set<string>} sentCache
- * @param {string}      igsid
- * @param {string}      username
- * @param {string}      mediaId
- * @param {string}      commentId
+ * @param {string} igsid
+ * @param {string} username
+ * @param {string} mediaId
+ * @param {string} commentId
  */
-async function markDMSent(sentCache, igsid, username, mediaId, commentId) {
-  // 1. In-memory guard — instant (segment by post)
-  sentCache.add(`${igsid}_${mediaId}`);
+async function markDMSent(igsid, username, mediaId, commentId) {
+  const key = `${igsid}_${mediaId}`;
+  sentCache.add(key);
 
-  // 2. Persist to Google Sheets
   try {
     const sheets = getSheetsClient();
     await sheets.spreadsheets.values.append({
@@ -291,8 +278,10 @@ async function markDMSent(sentCache, igsid, username, mediaId, commentId) {
       },
     });
   } catch (err) {
+    // If append fails, remove from cache so it retries next time
+    sentCache.delete(key);
     console.warn('[SHEETS] Could not persist DM_Sent record:', err.message);
-    // Non-fatal: in-memory Set still guards this process
+    throw err;
   }
 }
 
@@ -300,7 +289,7 @@ module.exports = {
   getAllRows,
   appendRow,
   deleteRowByMediaId,
-  loadSentIgsids,
+  initSentCache,
   isDMAlreadySent,
   markDMSent,
 };
