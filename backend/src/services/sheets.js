@@ -231,7 +231,7 @@ async function loadSentIgsids() {
     const sheets = getSheetsClient();
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range:         `${DM_LOG_TAB}!A:A`,  // only column A (igsid)
+      range:         `${DM_LOG_TAB}!A:C`,  // Fetch columns A through C to get igsid and media_id
     });
     const rows = res.data.values || [];
     // Skip header row (index 0)
@@ -240,7 +240,7 @@ async function loadSentIgsids() {
       const igsid = r[0] || '';
       const mediaId = r[2] || '';
       return `${igsid}_${mediaId}`;
-    }).filter(k => k !== '_'); // Ignore empty rows
+    }).filter(k => k !== '_' && !k.endsWith('_')); // Ignore empty/malformed rows
 
     console.log(`[SHEETS] Loaded ${keys.length} already-sent IGSID_MEDIA records from DM_Sent tab`);
     return new Set(keys);
