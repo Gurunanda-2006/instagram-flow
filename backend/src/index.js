@@ -99,7 +99,7 @@ async function start() {
 
   // Start comment polling (fallback for development mode — works without Live webhook)
   const { startPolling } = require('./services/pollComments');
-  startPolling();
+  await startPolling();
 
   app.listen(PORT, () => {
     console.log(`[BOOT] Server listening on port ${PORT}`);

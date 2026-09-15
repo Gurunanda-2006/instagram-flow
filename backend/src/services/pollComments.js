@@ -1,30 +1,54 @@
 'use strict';
 
 /**
- * Comment Polling Service — Live Media approach
+ * Comment Polling Service — Strict deduplication by commenter IGSID
  *
- * Fetches the live Instagram media list every POLL_MS milliseconds,
- * cross-references with the in-memory cache (keyword + product link),
- * and for matching comments sends a private DM + a public reply.
+ * Deduplication strategy (3 layers, in order):
  *
- * Duplicate-reply prevention (two layers):
- *   1. In-memory `processed` Set  — fast, survives within one server process
- *   2. API-based reply check       — queries existing replies on a comment
- *      before acting; survives Render restarts and redeploys
- *      (checks if our account already replied to that comment)
+ *  Layer 1 — In-memory IGSID Set (sentCache)
+ *    Fast check. Populated from Google Sheets at boot and updated on every
+ *    successful DM send. Prevents redundant Sheets lookups within the same
+ *    server process lifetime.
+ *
+ *  Layer 2 — Google Sheets "DM_Sent" tab
+ *    Persistent across Render restarts and redeploys. On boot, the full list
+ *    of already-notified IGSIDs is loaded into Layer 1. On every successful
+ *    send, the IGSID is appended to this tab immediately.
+ *
+ *  Layer 3 — Own-account comment filter
+ *    Skips any comment made by our own business account (e.g. public replies
+ *    we posted) so they are never re-processed as triggers.
+ *
+ * KEY RULE: deduplication is by COMMENTER IGSID, not comment ID.
+ * This means: once a person receives one DM, they NEVER receive another,
+ * even if they comment again hours/days later on any post.
  */
 
 const axios = require('axios');
 const { cache } = require('./cache');
 const { sendPrivateReply, replyToComment } = require('./instagram');
+const { loadSentIgsids, isDMAlreadySent, markDMSent } = require('./sheets');
 
 const BASE_URL = 'https://graph.instagram.com/v22.0';
 const TOKEN    = () => process.env.IG_ACCESS_TOKEN;
 const IG_USER  = () => process.env.IG_BUSINESS_ACCOUNT_ID;
 const POLL_MS  = 60_000;
 
-/** Layer-1 guard: comment IDs handled in this server process */
-const processed = new Set();
+/**
+ * In-memory cache of IGSIDs that have already received a DM.
+ * Populated from Google Sheets at startup via initSentCache().
+ * @type {Set<string>}
+ */
+let sentCache = new Set();
+
+/**
+ * Load all previously-sent IGSIDs from Google Sheets into the in-memory Set.
+ * Called once at server boot so the guard is immediately warm.
+ */
+async function initSentCache() {
+  sentCache = await loadSentIgsids();
+  console.log(`[POLL] Dedup cache loaded — ${sentCache.size} IGSIDs already notified`);
+}
 
 // ─── Fetch live media list ────────────────────────────────────────────────────
 async function fetchLiveMedia() {
@@ -51,39 +75,13 @@ async function fetchComments(mediaId) {
   }
 }
 
-// ─── Layer-2 guard: check if we already replied to this comment ───────────────
-/**
- * Fetches the existing replies on a comment and returns true if our
- * business account (IG_BUSINESS_ACCOUNT_ID) has already posted a reply.
- * This survives server restarts — state comes from Instagram directly.
- *
- * @param {string} commentId
- * @returns {Promise<boolean>}
- */
-async function alreadyReplied(commentId) {
-  try {
-    const res = await axios.get(`${BASE_URL}/${commentId}/replies`, {
-      params: { fields: 'id,from', access_token: TOKEN() },
-    });
-    const replies = res.data?.data || [];
-    const ourId   = IG_USER();
-    return replies.some(r => r.from?.id === ourId);
-  } catch {
-    // If we can't check (e.g. comment has no replies endpoint), assume safe to proceed
-    return false;
-  }
-}
-
 // ─── One poll cycle ───────────────────────────────────────────────────────────
 async function pollOnce() {
   const liveMedia = await fetchLiveMedia();
   if (!liveMedia.length) return;
 
   const tracked = liveMedia.filter(m => cache.get(m.id));
-  if (!tracked.length) {
-    console.log('[POLL] No tracked posts found — publish a post via the dashboard first');
-    return;
-  }
+  if (!tracked.length) return;
 
   for (const media of tracked) {
     const { trigger_keyword, product_link } = cache.get(media.id);
@@ -91,40 +89,34 @@ async function pollOnce() {
 
     for (const comment of comments) {
       const commentId     = comment.id;
-      if (!commentId) continue;
+      const commenterIgsid = comment.from?.id;
+      const commenterName  = comment.from?.username || 'unknown';
+      const text           = (comment.text || '').toLowerCase().trim();
 
-      // Layer-1: skip if already handled in this process lifetime
-      if (processed.has(commentId)) continue;
+      if (!commentId || !commenterIgsid) continue;
 
-      const commenterName = comment.from?.username || 'unknown';
-      const commenterFrom = comment.from?.id;
-      const text          = (comment.text || '').toLowerCase().trim();
+      // Layer 3: skip our own account's comments (public replies we posted)
+      if (commenterIgsid === IG_USER()) continue;
 
-      // Skip if commenter is our own account (prevent processing our own replies)
-      if (commenterFrom === IG_USER()) {
-        processed.add(commentId);
-        continue;
-      }
-
-      // Keyword match check
+      // Keyword match
       if (!text.includes(trigger_keyword.toLowerCase())) continue;
 
-      // Layer-2: check Instagram directly — already replied? (survives restarts)
-      const replied = await alreadyReplied(commentId);
-      if (replied) {
-        console.log(`[POLL] Skipping comment ${commentId} — already replied to @${commenterName}`);
-        processed.add(commentId); // add to Layer-1 to skip API call next time
+      // ── Layer 1 + 2: Has this person already received a DM? ──
+      if (isDMAlreadySent(sentCache, commenterIgsid)) {
+        console.log(`[POLL] Skipping @${commenterName} (${commenterIgsid}) — already notified`);
         continue;
       }
 
-      // Mark as processed BEFORE sending to prevent race conditions
-      processed.add(commentId);
-      console.log(`[POLL] ✓ "${text}" by @${commenterName} — sending DM + public reply`);
+      // ── Mark BEFORE sending to prevent race conditions across concurrent polls ──
+      // Add to in-memory Set immediately so parallel poll cycles don't double-send
+      sentCache.add(commenterIgsid);
+
+      console.log(`[POLL] ✓ New trigger from @${commenterName} — sending DM + reply`);
 
       try {
         // 1. Private DM with the product link
         await sendPrivateReply(commentId, product_link);
-        console.log(`[POLL] ✓ DM sent to @${commenterName}`);
+        console.log(`[POLL] ✓ DM sent to @${commenterName} (${commenterIgsid})`);
 
         // 2. Public comment reply to notify them
         await replyToComment(
@@ -132,7 +124,14 @@ async function pollOnce() {
           commenterName,
           'We have sent the product link to your DM! 📩 Check your messages.'
         );
+
+        // 3. Persist to Google Sheets AFTER successful send
+        await markDMSent(sentCache, commenterIgsid, commenterName, media.id, commentId);
+        console.log(`[POLL] ✓ @${commenterName} logged in DM_Sent sheet — will never DM again`);
+
       } catch (err) {
+        // If sending failed, remove from in-memory Set so it retries next cycle
+        sentCache.delete(commenterIgsid);
         console.error(`[POLL] ✗ Failed for @${commenterName}:`, err.response?.data || err.message);
       }
     }
@@ -140,7 +139,10 @@ async function pollOnce() {
 }
 
 // ─── Start polling loop ───────────────────────────────────────────────────────
-function startPolling() {
+async function startPolling() {
+  // Warm the dedup cache from Sheets before the first poll
+  await initSentCache();
+
   console.log(`[POLL] Polling started — interval: ${POLL_MS / 1000}s`);
   pollOnce().catch(e => console.error('[POLL] Initial poll error:', e.message));
   setInterval(() => {
