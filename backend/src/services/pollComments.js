@@ -101,17 +101,17 @@ async function pollOnce() {
       // Keyword match
       if (!text.includes(trigger_keyword.toLowerCase())) continue;
 
-      // ── Layer 1 + 2: Has this person already received a DM? ──
-      if (isDMAlreadySent(sentCache, commenterIgsid)) {
-        console.log(`[POLL] Skipping @${commenterName} (${commenterIgsid}) — already notified`);
+      // ── Layer 1 + 2: Has this person already received a DM FOR THIS POST? ──
+      if (isDMAlreadySent(sentCache, commenterIgsid, media.id)) {
+        console.log(`[POLL] Skipping @${commenterName} for post ${media.id} — already notified for this post`);
         continue;
       }
 
       // ── Mark BEFORE sending to prevent race conditions across concurrent polls ──
       // Add to in-memory Set immediately so parallel poll cycles don't double-send
-      sentCache.add(commenterIgsid);
+      sentCache.add(`${commenterIgsid}_${media.id}`);
 
-      console.log(`[POLL] ✓ New trigger from @${commenterName} — sending DM + reply`);
+      console.log(`[POLL] ✓ New trigger from @${commenterName} on post ${media.id} — sending DM + reply`);
 
       try {
         // 1. Private DM with the product link
@@ -127,11 +127,11 @@ async function pollOnce() {
 
         // 3. Persist to Google Sheets AFTER successful send
         await markDMSent(sentCache, commenterIgsid, commenterName, media.id, commentId);
-        console.log(`[POLL] ✓ @${commenterName} logged in DM_Sent sheet — will never DM again`);
+        console.log(`[POLL] ✓ @${commenterName} logged in DM_Sent sheet for post ${media.id} — won't DM again for this post`);
 
       } catch (err) {
         // If sending failed, remove from in-memory Set so it retries next cycle
-        sentCache.delete(commenterIgsid);
+        sentCache.delete(`${commenterIgsid}_${media.id}`);
         console.error(`[POLL] ✗ Failed for @${commenterName}:`, err.response?.data || err.message);
       }
     }

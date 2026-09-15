@@ -235,9 +235,15 @@ async function loadSentIgsids() {
     });
     const rows = res.data.values || [];
     // Skip header row (index 0)
-    const ids = rows.slice(1).map((r) => r[0]).filter(Boolean);
-    console.log(`[SHEETS] Loaded ${ids.length} already-sent IGSIDs from DM_Sent tab`);
-    return new Set(ids);
+    // We now read Column A (igsid) and Column C (media_id) to segment by post
+    const keys = rows.slice(1).map((r) => {
+      const igsid = r[0] || '';
+      const mediaId = r[2] || '';
+      return `${igsid}_${mediaId}`;
+    }).filter(k => k !== '_'); // Ignore empty rows
+
+    console.log(`[SHEETS] Loaded ${keys.length} already-sent IGSID_MEDIA records from DM_Sent tab`);
+    return new Set(keys);
   } catch (err) {
     console.warn('[SHEETS] Could not load DM_Sent tab:', err.message);
     return new Set();
@@ -245,19 +251,20 @@ async function loadSentIgsids() {
 }
 
 /**
- * Checks whether a DM has already been sent to this IGSID.
+ * Checks whether a DM has already been sent to this IGSID for THIS SPECIFIC POST.
  * Uses the in-memory Set (sentCache) for speed — no network call.
  *
  * @param {Set<string>} sentCache  The in-memory Set populated at boot
  * @param {string}      igsid
+ * @param {string}      mediaId
  * @returns {boolean}
  */
-function isDMAlreadySent(sentCache, igsid) {
-  return sentCache.has(igsid);
+function isDMAlreadySent(sentCache, igsid, mediaId) {
+  return sentCache.has(`${igsid}_${mediaId}`);
 }
 
 /**
- * Records that a DM was sent to this IGSID by:
+ * Records that a DM was sent to this IGSID for this Media by:
  *   1. Adding to the in-memory Set immediately
  *   2. Appending a row to the DM_Sent Google Sheet tab (persistent)
  *
@@ -268,8 +275,8 @@ function isDMAlreadySent(sentCache, igsid) {
  * @param {string}      commentId
  */
 async function markDMSent(sentCache, igsid, username, mediaId, commentId) {
-  // 1. In-memory guard — instant
-  sentCache.add(igsid);
+  // 1. In-memory guard — instant (segment by post)
+  sentCache.add(`${igsid}_${mediaId}`);
 
   // 2. Persist to Google Sheets
   try {
