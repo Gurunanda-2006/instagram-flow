@@ -96,7 +96,10 @@ async function pollOnce() {
       if (!commentId || !commenterIgsid) continue;
 
       // Layer 3: skip our own account's comments (public replies we posted)
-      if (commenterIgsid === IG_USER()) continue;
+      // Checking username is the most reliable way since IG API can return different internal IDs
+      if (commenterIgsid === IG_USER() || commenterName.toLowerCase() === 'asg_servizi') {
+        continue;
+      }
 
       // Keyword match
       if (!text.includes(trigger_keyword.toLowerCase())) continue;
@@ -108,7 +111,6 @@ async function pollOnce() {
       }
 
       // ── Mark BEFORE sending to prevent race conditions across concurrent polls ──
-      // Add to in-memory Set immediately so parallel poll cycles don't double-send
       sentCache.add(`${commenterIgsid}_${media.id}`);
 
       console.log(`[POLL] ✓ New trigger from @${commenterName} on post ${media.id} — sending DM + reply`);
@@ -119,11 +121,16 @@ async function pollOnce() {
         console.log(`[POLL] ✓ DM sent to @${commenterName} (${commenterIgsid})`);
 
         // 2. Public comment reply to notify them
-        await replyToComment(
-          commentId,
-          commenterName,
-          'We have sent the product link to your DM! 📩 Check your messages.'
-        );
+        // Use random variations to prevent Instagram from flagging consecutive exact matches as spam
+        const replies = [
+          'We have sent the product link to your DM! 📩 Check your messages.',
+          'Just sent the link straight to your DM! ✅ Let us know if you got it.',
+          'Link is in your messages! 💌 Go check your DM.',
+          'Sent! 📬 Check your DM for the product link.'
+        ];
+        const randomReply = replies[Math.floor(Math.random() * replies.length)];
+
+        await replyToComment(commentId, commenterName, randomReply);
 
         // 3. Persist to Google Sheets AFTER successful send
         await markDMSent(sentCache, commenterIgsid, commenterName, media.id, commentId);
