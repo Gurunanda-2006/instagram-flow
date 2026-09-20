@@ -54,6 +54,10 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
   const [spinning,   setSpinning]   = useState(false);
   const [deletingId, setDeletingId] = useState(null); // currently being deleted
 
+  // Modal State
+  const [deletePromptPost, setDeletePromptPost] = useState(null);
+  const [deleteOption,     setDeleteOption]     = useState('cloudinary_only'); // default
+
   const fetchPosts = useCallback(async (showSpinner = false) => {
     if (showSpinner) setSpinning(true);
     try {
@@ -75,21 +79,21 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
   useEffect(() => { if (refreshKey > 0) fetchPosts(); }, [refreshKey, fetchPosts]);
 
-  const handleDelete = async (post) => {
-    const deleteEverywhere = window.confirm(
-      `DELETE OPTIONS FOR POST:\n"${truncate(post.caption, 40)}"\n\nClick [OK] to delete EVERYWHERE (Instagram, Cloudinary, and Google Sheet). This stops automation.\n\nClick [Cancel] for more options.`
-    );
+  // Opens the custom modal
+  const handleDeleteClick = (post) => {
+    setDeletePromptPost(post);
+    setDeleteOption('cloudinary_only'); // Reset to default option
+  };
 
-    let mode = 'all';
-    if (!deleteEverywhere) {
-      const cloudinaryOnly = window.confirm(
-        `Do you want to delete the media from CLOUDINARY ONLY?\n\nThis frees up your storage space, but keeps the post LIVE on Instagram and keeps the automated DMs working.\n\nClick [OK] to delete from Cloudinary only. Click [Cancel] to abort.`
-      );
-      if (!cloudinaryOnly) return; // User aborted entirely
-      mode = 'cloudinary_only';
-    }
-
+  // Executes the deletion based on the selected option
+  const confirmDelete = async () => {
+    const post = deletePromptPost;
+    const mode = deleteOption;
+    
+    // Close modal immediately
+    setDeletePromptPost(null);
     setDeletingId(post.ig_media_id);
+
     try {
       const res  = await fetch(`${BACKEND}/api/posts/${post.ig_media_id}?mode=${mode}`, { method: 'DELETE' });
       const data = await res.json();
@@ -105,7 +109,6 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
         onDeleted?.();
       } else {
         alert('Media successfully deleted from Cloudinary to free up space! The automation is still running.');
-        // Optionally, we could update the UI to show a placeholder, but keeping the cached image is fine too.
       }
     } catch (err) {
       alert('Delete failed: ' + err.message);
@@ -195,7 +198,7 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
                     id={`delete-post-${post.ig_media_id || i}`}
                     title="Delete post"
                     disabled={isDeleting}
-                    onClick={() => handleDelete(post)}
+                    onClick={() => handleDeleteClick(post)}
                     style={{
                       flexShrink: 0,
                       padding: '7px 10px',
@@ -225,6 +228,85 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
           </div>
         )}
       </div>
+
+      {/* ── Custom Delete Modal ── */}
+      {deletePromptPost && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(3px)'
+        }}>
+          <div style={{
+            background: 'white', padding: '24px', borderRadius: '14px',
+            width: '90%', maxWidth: '480px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+          }}>
+            <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '1.3rem', color: '#111' }}>Delete Options</h3>
+            <p style={{ marginBottom: '20px', fontSize: '0.9rem', color: '#555', lineHeight: '1.5' }}>
+              Choose how you want to delete the post: <br/><strong>"{truncate(deletePromptPost.caption, 40)}"</strong>
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+              <label style={{ 
+                display: 'flex', gap: '12px', alignItems: 'flex-start', cursor: 'pointer', padding: '14px', 
+                border: deleteOption === 'cloudinary_only' ? '2px solid #3b82f6' : '1px solid #ddd', 
+                borderRadius: '10px', background: deleteOption === 'cloudinary_only' ? '#eff6ff' : '#fff',
+                transition: 'all 0.2s'
+              }}>
+                <input type="radio" name="deleteMode" value="cloudinary_only"
+                  checked={deleteOption === 'cloudinary_only'}
+                  onChange={() => setDeleteOption('cloudinary_only')}
+                  style={{ marginTop: '4px', transform: 'scale(1.2)' }} />
+                <div>
+                  <div style={{ fontWeight: '700', color: '#1e3a8a', fontSize: '0.95rem' }}>Delete from Cloudinary ONLY</div>
+                  <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: '4px', lineHeight: '1.4' }}>
+                    Frees up Cloudinary storage. The post stays LIVE on Instagram and the automated DMs will keep working.
+                  </div>
+                </div>
+              </label>
+
+              <label style={{ 
+                display: 'flex', gap: '12px', alignItems: 'flex-start', cursor: 'pointer', padding: '14px', 
+                border: deleteOption === 'all' ? '2px solid #ef4444' : '1px solid #ddd', 
+                borderRadius: '10px', background: deleteOption === 'all' ? '#fef2f2' : '#fff',
+                transition: 'all 0.2s'
+              }}>
+                <input type="radio" name="deleteMode" value="all"
+                  checked={deleteOption === 'all'}
+                  onChange={() => setDeleteOption('all')}
+                  style={{ marginTop: '4px', transform: 'scale(1.2)' }} />
+                <div>
+                  <div style={{ fontWeight: '700', color: '#991b1b', fontSize: '0.95rem' }}>Delete EVERYWHERE</div>
+                  <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: '4px', lineHeight: '1.4' }}>
+                    Permanently removes the post from Instagram, Cloudinary, and Google Sheets. This will STOP automation.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setDeletePromptPost(null)}
+                style={{ padding: '10px 20px', fontWeight: 'bold' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={confirmDelete}
+                style={{ 
+                  padding: '10px 20px', fontWeight: 'bold',
+                  background: deleteOption === 'all' ? '#dc2626' : 'var(--primary)', 
+                  borderColor: deleteOption === 'all' ? '#dc2626' : 'var(--primary)' 
+                }}
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
