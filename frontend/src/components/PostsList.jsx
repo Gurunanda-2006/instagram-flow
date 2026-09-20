@@ -76,21 +76,37 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
   useEffect(() => { if (refreshKey > 0) fetchPosts(); }, [refreshKey, fetchPosts]);
 
   const handleDelete = async (post) => {
-    if (!window.confirm(`Delete post "${truncate(post.caption, 40)}"?\n\nThis will remove it from:\n• Instagram\n• Cloudinary (image)\n• Google Sheet`)) return;
+    const deleteEverywhere = window.confirm(
+      `DELETE OPTIONS FOR POST:\n"${truncate(post.caption, 40)}"\n\nClick [OK] to delete EVERYWHERE (Instagram, Cloudinary, and Google Sheet). This stops automation.\n\nClick [Cancel] for more options.`
+    );
+
+    let mode = 'all';
+    if (!deleteEverywhere) {
+      const cloudinaryOnly = window.confirm(
+        `Do you want to delete the media from CLOUDINARY ONLY?\n\nThis frees up your storage space, but keeps the post LIVE on Instagram and keeps the automated DMs working.\n\nClick [OK] to delete from Cloudinary only. Click [Cancel] to abort.`
+      );
+      if (!cloudinaryOnly) return; // User aborted entirely
+      mode = 'cloudinary_only';
+    }
 
     setDeletingId(post.ig_media_id);
     try {
-      const res  = await fetch(`${BACKEND}/api/posts/${post.ig_media_id}`, { method: 'DELETE' });
+      const res  = await fetch(`${BACKEND}/api/posts/${post.ig_media_id}?mode=${mode}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Delete failed');
 
-      // Remove from local state immediately
-      setPosts(prev => {
-        const updated = prev.filter(p => p.ig_media_id !== post.ig_media_id);
-        onCountChange?.(updated.length);
-        return updated;
-      });
-      onDeleted?.();
+      if (mode === 'all') {
+        // Remove from local state immediately
+        setPosts(prev => {
+          const updated = prev.filter(p => p.ig_media_id !== post.ig_media_id);
+          onCountChange?.(updated.length);
+          return updated;
+        });
+        onDeleted?.();
+      } else {
+        alert('Media successfully deleted from Cloudinary to free up space! The automation is still running.');
+        // Optionally, we could update the UI to show a placeholder, but keeping the cached image is fine too.
+      }
     } catch (err) {
       alert('Delete failed: ' + err.message);
     } finally {

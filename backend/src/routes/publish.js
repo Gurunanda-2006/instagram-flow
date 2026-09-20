@@ -107,6 +107,7 @@ router.get('/refresh-token', async (_req, res, next) => {
 router.delete('/posts/:igMediaId', async (req, res, next) => {
   try {
     const { igMediaId } = req.params;
+    const { mode } = req.query; // e.g. '?mode=cloudinary_only'
     if (!igMediaId) return res.status(400).json({ error: 'igMediaId is required' });
 
     // 1. Get the post data (for image_url) before deleting
@@ -114,8 +115,22 @@ router.delete('/posts/:igMediaId', async (req, res, next) => {
     const postRow   = allRows.find(r => r.ig_media_id === igMediaId);
     const mediaUrl  = postRow?.image_url || '';
 
-    console.log(`[DELETE] Deleting post ${igMediaId}…`);
+    console.log(`[DELETE] Deleting post ${igMediaId} (Mode: ${mode || 'all'})…`);
 
+    // Mode: CLOUDINARY ONLY
+    if (mode === 'cloudinary_only') {
+      if (mediaUrl) {
+        try { await deleteCloudinaryMedia(mediaUrl); }
+        catch (e) { console.warn('[DELETE] Cloudinary delete failed:', e.message); }
+      }
+      return res.json({
+        success: true,
+        ig_media_id: igMediaId,
+        message: 'Deleted from Cloudinary only. Post is still live on Instagram and automation is active.'
+      });
+    }
+
+    // Mode: ALL (Default)
     // 2. Delete from Instagram (non-fatal if it fails)
     const igResult = await deleteInstagramPost(igMediaId);
     console.log('[DELETE] Instagram:', igResult.message);
