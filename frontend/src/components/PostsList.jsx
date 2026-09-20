@@ -82,7 +82,11 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
   // Opens the custom modal
   const handleDeleteClick = (post) => {
     setDeletePromptPost(post);
-    setDeleteOption('cloudinary_only'); // Reset to default option
+    if (post.image_url === 'DELETED') {
+      setDeleteOption('all');
+    } else {
+      setDeleteOption('cloudinary_only'); // Reset to default option
+    }
   };
 
   // Executes the deletion based on the selected option
@@ -108,6 +112,10 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
         });
         onDeleted?.();
       } else {
+        // Update local state to mark as DELETED
+        setPosts(prev => prev.map(p => 
+          p.ig_media_id === post.ig_media_id ? { ...p, image_url: 'DELETED' } : p
+        ));
         alert('Media successfully deleted from Cloudinary to free up space! The automation is still running.');
       }
     } catch (err) {
@@ -116,6 +124,8 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
       setDeletingId(null);
     }
   };
+
+  const isCloudinaryDeleted = deletePromptPost?.image_url === 'DELETED';
 
   return (
     <div className="card">
@@ -166,11 +176,13 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
                   id={`post-${post.ig_media_id || i}`}
                   style={{ opacity: isDeleting ? 0.4 : 1, transition: 'opacity .3s' }}
                 >
-                  {post.image_url ? (
+                  {post.image_url && post.image_url !== 'DELETED' ? (
                     <img src={post.image_url} alt="Post thumbnail" className="post-thumb"
                       loading="lazy" onError={(e) => { e.target.style.display = 'none'; }} />
                   ) : (
-                    <div className="post-thumb-placeholder">🖼️</div>
+                    <div className="post-thumb-placeholder" style={{ background: '#f1f5f9', color: '#94a3b8' }}>
+                      <div style={{ fontSize: '0.7rem', textAlign: 'center', padding: '2px' }}>Media<br/>Deleted</div>
+                    </div>
                   )}
 
                   <div className="post-info">
@@ -248,19 +260,27 @@ export default function PostsList({ refreshKey, onCountChange, onDeleted }) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
               <label style={{ 
-                display: 'flex', gap: '12px', alignItems: 'flex-start', cursor: 'pointer', padding: '14px', 
+                display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '14px', 
                 border: deleteOption === 'cloudinary_only' ? '2px solid #3b82f6' : '1px solid #ddd', 
-                borderRadius: '10px', background: deleteOption === 'cloudinary_only' ? '#eff6ff' : '#fff',
+                borderRadius: '10px', 
+                background: isCloudinaryDeleted ? '#f1f5f9' : (deleteOption === 'cloudinary_only' ? '#eff6ff' : '#fff'),
+                opacity: isCloudinaryDeleted ? 0.6 : 1,
+                cursor: isCloudinaryDeleted ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s'
               }}>
                 <input type="radio" name="deleteMode" value="cloudinary_only"
                   checked={deleteOption === 'cloudinary_only'}
+                  disabled={isCloudinaryDeleted}
                   onChange={() => setDeleteOption('cloudinary_only')}
                   style={{ marginTop: '4px', transform: 'scale(1.2)' }} />
                 <div>
-                  <div style={{ fontWeight: '700', color: '#1e3a8a', fontSize: '0.95rem' }}>Delete from Cloudinary ONLY</div>
+                  <div style={{ fontWeight: '700', color: isCloudinaryDeleted ? '#64748b' : '#1e3a8a', fontSize: '0.95rem', textDecoration: isCloudinaryDeleted ? 'line-through' : 'none' }}>
+                    {isCloudinaryDeleted ? 'Already Deleted from Cloudinary' : 'Delete from Cloudinary ONLY'}
+                  </div>
                   <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: '4px', lineHeight: '1.4' }}>
-                    Frees up Cloudinary storage. The post stays LIVE on Instagram and the automated DMs will keep working.
+                    {isCloudinaryDeleted 
+                      ? "This media has already been removed to save storage space." 
+                      : "Frees up Cloudinary storage. The post stays LIVE on Instagram and the automated DMs will keep working."}
                   </div>
                 </div>
               </label>

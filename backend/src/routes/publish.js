@@ -26,7 +26,7 @@ const { createMediaContainer,
         refreshLongLivedToken,
         deleteInstagramPost }          = require('../services/instagram');
 const { appendRow, getAllRows,
-        deleteRowByMediaId }           = require('../services/sheets');
+        deleteRowByMediaId, updateRowImageUrl } = require('../services/sheets');
 const { cache }                       = require('../services/cache');
 
 const router = express.Router();
@@ -119,10 +119,14 @@ router.delete('/posts/:igMediaId', async (req, res, next) => {
 
     // Mode: CLOUDINARY ONLY
     if (mode === 'cloudinary_only') {
-      if (mediaUrl) {
+      if (mediaUrl && mediaUrl !== 'DELETED') {
         try { await deleteCloudinaryMedia(mediaUrl); }
         catch (e) { console.warn('[DELETE] Cloudinary delete failed:', e.message); }
       }
+      // Update Google Sheet row so it remembers it is deleted
+      await updateRowImageUrl(igMediaId, 'DELETED');
+      await cache.refresh();
+
       return res.json({
         success: true,
         ig_media_id: igMediaId,
@@ -136,7 +140,7 @@ router.delete('/posts/:igMediaId', async (req, res, next) => {
     console.log('[DELETE] Instagram:', igResult.message);
 
     // 3. Delete media from Cloudinary (non-fatal)
-    if (mediaUrl) {
+    if (mediaUrl && mediaUrl !== 'DELETED') {
       try { await deleteCloudinaryMedia(mediaUrl); }
       catch (e) { console.warn('[DELETE] Cloudinary delete failed:', e.message); }
     }

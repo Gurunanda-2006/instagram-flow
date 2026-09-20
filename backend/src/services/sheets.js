@@ -174,6 +174,45 @@ async function deleteRowByMediaId(igMediaId) {
   return true;
 }
 
+// ─── Update Image URL by Instagram media ID ──────────────────────────────────
+/**
+ * Updates the image_url (Column C) for a given ig_media_id.
+ * @param {string} igMediaId
+ * @param {string} newUrl
+ * @returns {Promise<boolean>} true if updated, false if not found
+ */
+async function updateRowImageUrl(igMediaId, newUrl) {
+  const sheets = getSheetsClient();
+
+  // 1. Get all rows to find which row index has this media ID
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${TAB_NAME}!A:G`,
+  });
+
+  const rows = res.data.values || [];
+  let targetRowIndex = -1; // 1-indexed sheet row
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][1] === igMediaId) {
+      targetRowIndex = i + 1;
+      break;
+    }
+  }
+  if (targetRowIndex === -1) return false;
+
+  // 2. Update Column C (image_url) for that row
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `${TAB_NAME}!C${targetRowIndex}`,
+    valueInputOption: 'RAW',
+    requestBody: {
+      values: [[newUrl]],
+    },
+  });
+
+  return true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  PERMANENT DM SENT LOG — "DM_Sent" tab
 //
@@ -289,6 +328,7 @@ module.exports = {
   getAllRows,
   appendRow,
   deleteRowByMediaId,
+  updateRowImageUrl,
   initSentCache,
   isDMAlreadySent,
   markDMSent,
