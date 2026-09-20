@@ -15,7 +15,8 @@ function useDragOver() {
 }
 
 export default function PublishForm({ onPublished }) {
-  const [image,          setImage]          = useState(null);
+  const [isReel,         setIsReel]         = useState(false);
+  const [media,          setMedia]          = useState(null);
   const [preview,        setPreview]        = useState(null);
   const [caption,        setCaption]        = useState('');
   const [productLink,    setProductLink]    = useState('');
@@ -27,7 +28,7 @@ export default function PublishForm({ onPublished }) {
 
   const handleFile = useCallback((file) => {
     if (!file) return;
-    setImage(file);
+    setMedia(file);
     const reader = new FileReader();
     reader.onload = (e) => setPreview(e.target.result);
     reader.readAsDataURL(file);
@@ -39,13 +40,13 @@ export default function PublishForm({ onPublished }) {
     if (file) handleFile(file);
   }, [dragHandlers, handleFile]);
 
-  const removeImage = () => { setImage(null); setPreview(null); };
+  const removeMedia = () => { setMedia(null); setPreview(null); };
 
   const captionLen = caption.length;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!image)                 return setStatus({ type: 'error', message: 'Please select an image.' });
+    if (!media)                 return setStatus({ type: 'error', message: 'Please select a media file.' });
     if (!caption.trim())        return setStatus({ type: 'error', message: 'Caption cannot be empty.' });
     if (!productLink.trim())    return setStatus({ type: 'error', message: 'Product link is required.' });
     if (!triggerKeyword.trim()) return setStatus({ type: 'error', message: 'Trigger keyword is required.' });
@@ -56,7 +57,8 @@ export default function PublishForm({ onPublished }) {
 
     try {
       const formData = new FormData();
-      formData.append('image',           image);
+      formData.append('media',           media);
+      formData.append('is_reel',         isReel);
       formData.append('caption',         caption.trim());
       formData.append('product_link',    productLink.trim());
       formData.append('trigger_keyword', triggerKeyword.trim().toLowerCase());
@@ -66,7 +68,7 @@ export default function PublishForm({ onPublished }) {
       if (!res.ok) throw new Error(data.error || 'Publish failed');
 
       setStatus({ type: 'success', message: `✓ Published! Post ID: ${data.ig_media_id}` });
-      setImage(null); setPreview(null); setCaption(''); setProductLink(''); setTriggerKeyword('');
+      setMedia(null); setPreview(null); setCaption(''); setProductLink(''); setTriggerKeyword('');
       onPublished?.();
     } catch (err) {
       setStatus({ type: 'error', message: err.message });
@@ -78,10 +80,10 @@ export default function PublishForm({ onPublished }) {
   return (
     <div className="card">
       <div className="card-header">
-        <div className="card-header-icon">📸</div>
+        <div className="card-header-icon">{isReel ? '📱' : '📸'}</div>
         <div>
-          <h2>Publish New Post</h2>
-          <p>Upload an image and configure automation</p>
+          <h2>Publish New {isReel ? 'Reel' : 'Post'}</h2>
+          <p>Upload a {isReel ? 'video' : 'photo'} and configure automation</p>
         </div>
       </div>
 
@@ -93,27 +95,48 @@ export default function PublishForm({ onPublished }) {
           </div>
         )}
 
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', background: '#f5f5f5', padding: '4px', borderRadius: '8px' }}>
+          <button 
+            type="button" 
+            style={{ flex: 1, padding: '8px', border: 'none', background: !isReel ? 'white' : 'transparent', borderRadius: '6px', cursor: 'pointer', fontWeight: !isReel ? 'bold' : 'normal', boxShadow: !isReel ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}
+            onClick={() => setIsReel(false)}
+          >
+            📸 Image Post
+          </button>
+          <button 
+            type="button" 
+            style={{ flex: 1, padding: '8px', border: 'none', background: isReel ? 'white' : 'transparent', borderRadius: '6px', cursor: 'pointer', fontWeight: isReel ? 'bold' : 'normal', boxShadow: isReel ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}
+            onClick={() => setIsReel(true)}
+          >
+            📱 Instagram Reel
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit} noValidate>
 
-          {/* Image upload */}
+          {/* Media upload */}
           <div className="form-group">
-            <label className="form-label">Image <span>*</span></label>
+            <label className="form-label">{isReel ? 'Video (9:16)' : 'Image'} <span>*</span></label>
             {preview ? (
               <div>
-                <img src={preview} alt="Preview" className="upload-preview" />
+                {isReel ? (
+                   <video src={preview} controls className="upload-preview" style={{maxHeight: 300, background: '#000'}} />
+                ) : (
+                   <img src={preview} alt="Preview" className="upload-preview" />
+                )}
                 <button type="button" className="btn btn-secondary"
-                  onClick={removeImage} style={{ marginTop: 8, width: '100%' }}>
-                  ✕ Remove Image
+                  onClick={removeMedia} style={{ marginTop: 8, width: '100%' }}>
+                  ✕ Remove {isReel ? 'Video' : 'Image'}
                 </button>
-                <div className="form-hint">📄 {image?.name} · {(image?.size / 1024).toFixed(0)} KB</div>
+                <div className="form-hint">📄 {media?.name} · {(media?.size / 1024).toFixed(0)} KB</div>
               </div>
             ) : (
               <div className={`upload-zone ${dragOver ? 'dragover' : ''}`} {...dragHandlers} onDrop={onDrop}>
-                <input type="file" accept="image/jpeg,image/png,image/webp" id="image-input"
+                <input type="file" accept={isReel ? "video/mp4,video/quicktime" : "image/jpeg,image/png,image/webp"} id="image-input"
                   onChange={(e) => handleFile(e.target.files[0])} />
-                <span className="upload-icon">🖼️</span>
+                <span className="upload-icon">{isReel ? '🎬' : '🖼️'}</span>
                 <div className="upload-text">Drag & drop or click to upload</div>
-                <div className="upload-subtext">JPEG, PNG, WEBP — up to 8 MB</div>
+                <div className="upload-subtext">{isReel ? 'MP4, MOV (9:16 ratio) — up to 100 MB' : 'JPEG, PNG, WEBP — up to 8 MB'}</div>
               </div>
             )}
           </div>

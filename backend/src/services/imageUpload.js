@@ -31,14 +31,14 @@ cloudinary.config({
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 /**
- * Upload an image buffer to Cloudinary and return its public HTTPS URL.
+ * Upload a media buffer to Cloudinary and return its public HTTPS URL.
  *
- * @param {Buffer}  fileBuffer   Raw image bytes from multer
- * @param {string}  mimeType     e.g. 'image/jpeg'
+ * @param {Buffer}  fileBuffer   Raw bytes from multer
+ * @param {string}  mimeType     e.g. 'image/jpeg' or 'video/mp4'
  * @param {string}  filename     Original filename (used as a human-readable public_id hint)
  * @returns {Promise<string>}    Permanent Cloudinary HTTPS URL
  */
-async function uploadImage(fileBuffer, mimeType, filename) {
+async function uploadMedia(fileBuffer, mimeType, filename) {
   // Validate env vars early so the error message is clear
   if (!process.env.CLOUDINARY_CLOUD_NAME) {
     throw new Error('CLOUDINARY_CLOUD_NAME is not set in environment variables');
@@ -54,14 +54,14 @@ async function uploadImage(fileBuffer, mimeType, filename) {
   const baseName = filename.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
   const publicId  = `instaflow/${baseName}_${Date.now()}`;
 
-  console.log(`[IMAGE] Uploading to Cloudinary as "${publicId}"…`);
+  console.log(`[MEDIA] Uploading to Cloudinary as "${publicId}"…`);
 
   // Upload via upload_stream (Buffer → stream → Cloudinary)
   const url = await new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         public_id: publicId,
-        resource_type: 'image',
+        resource_type: 'auto', // Automatically detects image vs video
         overwrite:     false,
         // Deliver as original quality — Instagram re-compresses anyway
         quality:       'auto',
@@ -78,34 +78,44 @@ async function uploadImage(fileBuffer, mimeType, filename) {
     Readable.from(fileBuffer).pipe(uploadStream);
   });
 
-  console.log(`[IMAGE] ✓ Uploaded to Cloudinary: ${url}`);
+  console.log(`[MEDIA] ✓ Uploaded to Cloudinary: ${url}`);
   return url;
 }
 
-// ─── Delete an image from Cloudinary ─────────────────────────────────────────
+// ─── Delete media from Cloudinary ─────────────────────────────────────────
 /**
  * Extracts the public_id from a Cloudinary URL and destroys the asset.
- * URL format: https://res.cloudinary.com/<cloud>/image/upload/v<ver>/<folder>/<name>.jpg
  *
- * @param {string} imageUrl  The full Cloudinary image URL stored in the Sheet
+ * @param {string} mediaUrl  The full Cloudinary media URL stored in the Sheet
  */
-async function deleteCloudinaryImage(imageUrl) {
-  if (!imageUrl || !imageUrl.includes('cloudinary.com')) {
-    console.warn('[IMAGE] Skipping Cloudinary delete — URL not a Cloudinary URL:', imageUrl);
+async function deleteCloudinaryMedia(mediaUrl) {
+  if (!mediaUrl || !mediaUrl.includes('cloudinary.com')) {
+    console.warn('[MEDIA] Skipping Cloudinary delete — URL not a Cloudinary URL:', mediaUrl);
     return;
   }
 
   // Extract everything after /upload/ and strip the file extension
-  const match = imageUrl.match(/\/upload\/(?:v\d+\/)?(.+)\.[a-z]+$/i);
+  const match = mediaUrl.match(/\/upload\/(?:v\d+\/)?(.+)\.[a-z0-9]+$/i);
   if (!match) {
-    console.warn('[IMAGE] Could not extract public_id from URL:', imageUrl);
+    console.warn('[MEDIA] Could not extract public_id from URL:', mediaUrl);
     return;
   }
   const publicId = match[1];
-  console.log(`[IMAGE] Deleting Cloudinary asset: ${publicId}`);
+  
+  // Need to figure out if it was a video or image. We can just try both or auto.
+  // Actually, Cloudinary destroy requires the resource_type if it's not 'image'.
+  // Since we might not know, we can try 'video' then 'image'.
+  console.log(`[MEDIA] Deleting Cloudinary asset: ${publicId}`);
 
-  const result = await cloudinary.uploader.destroy(publicId);
-  console.log(`[IMAGE] Cloudinary delete result for "${publicId}":`, result.result);
+  try {
+    let result = await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+    if (result.result !== 'ok') {
+      result = await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+    }
+    console.log(`[MEDIA] Cloudinary delete result for "${publicId}":`, result.result);
+  } catch (err) {
+    console.warn('[MEDIA] Failed to delete from Cloudinary:', err.message);
+  }
 }
 
-module.exports = { uploadImage, deleteCloudinaryImage };
+module.exports = { uploadMedia, deleteCloudinaryMedia };

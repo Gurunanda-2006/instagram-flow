@@ -29,19 +29,26 @@ function igError(context, err) {
 // ─── Create a media container ─────────────────────────────────────────────────
 /**
  * Step 1 of the two-step publish flow.
- * @param {string} imageUrl  Publicly accessible image URL
+ * @param {string} mediaUrl  Publicly accessible image or video URL
  * @param {string} caption
+ * @param {boolean} isReel   True if publishing an Instagram Reel (9:16 video)
  * @returns {Promise<string>} containerId
  */
-async function createMediaContainer(imageUrl, caption) {
+async function createMediaContainer(mediaUrl, caption, isReel = false) {
   try {
-    const res = await axios.post(`${BASE_URL}/${IG_USER()}/media`, null, {
-      params: {
-        image_url:    imageUrl,
-        caption,
-        access_token: TOKEN(),
-      },
-    });
+    const params = {
+      caption,
+      access_token: TOKEN(),
+    };
+
+    if (isReel) {
+      params.media_type = 'REELS';
+      params.video_url  = mediaUrl;
+    } else {
+      params.image_url  = mediaUrl;
+    }
+
+    const res = await axios.post(`${BASE_URL}/${IG_USER()}/media`, null, { params });
     return res.data.id;
   } catch (err) {
     throw igError('createContainer', err);
