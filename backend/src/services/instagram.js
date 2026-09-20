@@ -83,11 +83,12 @@ async function publishContainer(containerId) {
 
 /**
  * Poll the container's STATUS field until it's FINISHED or ERROR.
- * Retries up to 10 times with 2-second gaps (20 seconds max).
+ * Retries up to 25 times with 3-second gaps (75 seconds max).
+ * Videos (Reels) take much longer to process than images.
  */
 async function waitForContainerReady(containerId) {
-  const MAX_ATTEMPTS = 10;
-  const DELAY_MS     = 2000;
+  const MAX_ATTEMPTS = 25;
+  const DELAY_MS     = 3000;
 
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     const res = await axios.get(`${BASE_URL}/${containerId}`, {
@@ -96,12 +97,12 @@ async function waitForContainerReady(containerId) {
 
     const status = res.data.status_code;
     if (status === 'FINISHED') return;
-    if (status === 'ERROR')    throw new Error('Instagram media container entered ERROR state');
+    if (status === 'ERROR')    throw new Error('Instagram media container entered ERROR state during video processing');
 
     await new Promise((r) => setTimeout(r, DELAY_MS));
   }
 
-  throw new Error('Instagram media container did not reach FINISHED state in time');
+  throw new Error('Instagram media container did not reach FINISHED state in time. The video might be too large or Meta servers are slow today.');
 }
 
 // ─── Send a private DM to a commenter via their comment ─────────────────────
