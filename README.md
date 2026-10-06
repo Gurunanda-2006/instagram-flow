@@ -1,5 +1,9 @@
 # Instagram Comment-to-DM Automation Engine 🚀
 
+> **Client Project:** Built for a client running an Instagram affiliate marketing business focused on fashion products. This automation helps convert Instagram comments into potential sales by automatically sending product links through DMs when users comment with a specific keyword.
+
+**Client Instagram:** [@asg_servizi](https://www.instagram.com/asg_servizi/)
+
 A highly scalable, production-ready Node.js backend that listens to live Instagram comments via Meta Webhooks and instantly sends automated Private DMs containing product links, followed by a randomized public comment reply.
 
 ## 🏗️ System Architecture
